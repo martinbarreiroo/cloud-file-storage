@@ -1,7 +1,7 @@
 name: Main Branch CI
 
 on:
-  pull-request:
+  pull_request:
     branches:
       - main
       - dev

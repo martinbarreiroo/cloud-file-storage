@@ -1,0 +1,33 @@
+#!/bin/bash
+
+echo "*********************************************************"
+echo "Running Prettier... "
+echo "*********************************************************"
+
+# Change to the root directory of the project
+# shellcheck disable=SC2164
+cd "$(dirname "$0")/.."
+
+# Run Prettier
+npm run format
+status=$?
+
+if [ "$status" -ne 0 ]; then
+    echo "*********************************************************"
+    echo "       ********************************************      "
+    echo 1>&2 "Prettier found issues it could not fix."
+    echo "Run 'npm run format' in your terminal and fix the issues before trying to commit again."
+    echo "       ********************************************      "
+    echo "*********************************************************"
+    exit 1
+fi
+
+# Add all changes to the staging area
+echo "*********************************************************"
+echo "Adding all changes to the staging area... "
+echo "*********************************************************"
+
+git add .
+
+# Exit
+exit 0

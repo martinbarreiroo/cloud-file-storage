@@ -10,18 +10,14 @@ import { AuthService } from '../service/auth.service';
 import { LocalAuthGuard } from '../auth/guards/local-auth.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateUserDto } from '../dto/user/create-user.dto';
-import { LoginDto } from '../dto/user/login.dto';
 import {
   ApiOperation,
   ApiResponse,
   ApiTags,
   ApiBearerAuth,
-  ApiBody,
 } from '@nestjs/swagger';
-import {
-  AuthResponseDto,
-  RegisterResponseDto,
-} from '../dto/responses/auth-response.dto';
+import { AuthResponseDto } from '../dto/responses/auth-response.dto';
+import { RequestWithUser } from '../interfaces/user.interface';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -47,10 +43,9 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiBody({ type: LoginDto })
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Request() req, @Body() loginDto: LoginDto) {
+  login(@Request() req: RequestWithUser) {
     return this.authService.login(req.user);
   }
 
@@ -63,7 +58,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get('profile')
-  getProfile(@Request() req) {
+  getProfile(@Request() req: RequestWithUser) {
     return req.user;
   }
 }

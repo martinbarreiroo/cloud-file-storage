@@ -9,9 +9,9 @@ services:
     environment:
       DB_USER: ${DB_USER:-admin}
       DB_PASSWORD: ${DB_PASSWORD:-admin}
-      DB_NAME: cloud-file-storage-db
-      DB_HOST: db
-      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-cloud-file-storage-db}
+      DB_HOST: ${DB_HOST:-localhost}
+      DB_PORT: ${DB_PORT:-5432}
       DOCKER_PORT: 8080
     env_file:
       - .env
@@ -22,8 +22,15 @@ services:
     image: postgres:latest
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-admin}
+      POSTGRES_DB: ${DB_NAME:-cloud-file-storage-db}
     env_file:
       - .env
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/cloud-file-storage-data
     restart: always
+
+volumes:
+  pgdata:

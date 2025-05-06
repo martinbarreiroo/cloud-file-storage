@@ -13,23 +13,34 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<JwtUser | null> {
-    const user = await this.usersService.getUserByEmail(email);
+  async validateUser(
+    username: string,
+    password: string,
+  ): Promise<JwtUser | null> {
+    try {
+      const user = await this.usersService.findByUsername(username);
 
-    if (user && (await bcrypt.compare(password, user.password))) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password: _password, ...result } = user;
-      return result as JwtUser;
+      if (user && (await this.comparePasswords(password, user.password))) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password: _, ...result } = user;
+        return result as JwtUser;
+      }
+    } catch (error) {
+      // Handle error appropriately
+      console.error('User validation error:', error);
     }
 
     return null;
   }
 
-  login(user: JwtUser): AuthResponse {
-    const payload: JwtPayload = { email: user.email, sub: user.id };
+  async login(user: JwtUser): Promise<AuthResponse> {
+    const payload: JwtPayload = {
+      email: user.email,
+      sub: user.id,
+    };
 
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: await this.jwtService.signAsync(payload),
       user: {
         id: user.id,
         username: user.username,
@@ -40,11 +51,7 @@ export class AuthService {
 
   async register(createUserDto: CreateUserDto): Promise<AuthResponse> {
     const user = await this.usersService.create(createUserDto);
-    // Use underscore prefix to indicate intentionally unused variable
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password: _password, ...userData } = user;
 
-    // Generate JWT token similar to login method
     const payload: JwtPayload = { email: user.email, sub: user.id };
 
     return {
@@ -55,5 +62,12 @@ export class AuthService {
         email: user.email,
       },
     };
+  }
+
+  private async comparePasswords(
+    password: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
+    return bcrypt.compare(password, hashedPassword);
   }
 }

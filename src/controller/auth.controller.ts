@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { AuthResponseDto } from '../dto/responses/auth-response.dto';
+import { AuthResponseDto } from '../dto/auth/auth-response.dto';
 import { RequestWithUser } from '../interfaces/user.interface';
 
 @ApiTags('auth')

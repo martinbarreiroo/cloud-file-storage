@@ -6,7 +6,6 @@ import {
   UseInterceptors,
   UploadedFile,
   Request,
-  Logger,
   Get,
   NotFoundException,
   HttpStatus,
@@ -24,20 +23,12 @@ import {
   ApiTags,
   ApiQuery,
 } from '@nestjs/swagger';
-import { AzureStorageProvider } from 'src/providers/storage/azure-storage.provider';
-import { MinioStorageProvider } from 'src/providers/storage/minio-storage.provider';
 import { RequestWithUser } from 'src/interfaces/user.interface';
 
 @ApiTags('storage')
 @Controller('storage')
 export class StorageController {
-  private readonly logger = new Logger(StorageController.name);
-
-  constructor(
-    private storageService: StorageService,
-    private azureStorageProvider: AzureStorageProvider,
-    private minioStorageProvider: MinioStorageProvider,
-  ) {}
+  constructor(private storageService: StorageService) {}
 
   @ApiOperation({ summary: 'Upload a file to cloud storage' })
   @ApiConsumes('multipart/form-data')
@@ -67,95 +58,6 @@ export class StorageController {
     }
 
     return result;
-  }
-
-  @ApiOperation({ summary: 'Test Azure blob storage directly' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({
-    status: 201,
-    description: 'File uploaded successfully to Azure',
-  })
-  @ApiResponse({ status: 400, description: 'Failed to upload to Azure' })
-  @UseGuards(JwtAuthGuard)
-  @Post('test-azure')
-  @UseInterceptors(FileInterceptor('file'))
-  async testAzureUpload(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req: RequestWithUser,
-  ) {
-    try {
-      // Log the user object to understand its structure
-      this.logger.debug(`User object: ${JSON.stringify(req.user)}`);
-
-      // Use the id property from the user object
-      const userId = req.user.id;
-
-      // Test the Azure provider directly
-      const result = await this.azureStorageProvider.uploadFile(
-        file.buffer,
-        file.originalname,
-        file.mimetype,
-        userId,
-        'Test file upload',
-      );
-
-      return {
-        success: true,
-        message: 'File uploaded successfully to Azure',
-        fileDetails: result,
-      };
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errorResponse = {
-        success: false,
-        message: `Failed to upload to Azure: ${errorMessage}`,
-      };
-      throw new HttpException(errorResponse, HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  @ApiOperation({ summary: 'Test MinIO storage directly' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({
-    status: 201,
-    description: 'File uploaded successfully to MinIO',
-  })
-  @ApiResponse({ status: 400, description: 'Failed to upload to MinIO' })
-  @UseGuards(JwtAuthGuard)
-  @Post('test-minio')
-  @UseInterceptors(FileInterceptor('file'))
-  async testMinioUpload(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req: RequestWithUser,
-  ) {
-    try {
-      // Use the id property from the user object
-      const userId = req.user.id;
-
-      // Test the MinIO provider directly
-      const result = await this.minioStorageProvider.uploadFile(
-        file.buffer,
-        file.originalname,
-        file.mimetype,
-        userId,
-        'Test file upload to MinIO',
-      );
-
-      return {
-        success: true,
-        message: 'File uploaded successfully to MinIO',
-        fileDetails: result,
-      };
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errorResponse = {
-        success: false,
-        message: `Failed to upload to MinIO: ${errorMessage}`,
-      };
-      throw new HttpException(errorResponse, HttpStatus.BAD_REQUEST);
-    }
   }
 
   @ApiOperation({ summary: 'Check provider status' })

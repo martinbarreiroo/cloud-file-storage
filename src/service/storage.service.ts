@@ -9,7 +9,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from 'src/entities/file/file.entity';
-import { StorageProviderEnum } from 'src/enums/storage-provider-enum';
+import { StorageProviderEnum } from 'src/enums/storage-provider.enum';
+import { UserQuotaService } from './user-quota.service';
+import { QuotaExceededException } from '../exceptions/quota-exceeded.exception';
+import { BYTES_IN_MB } from '../constants/quota.constants';
 
 @Injectable()
 export class StorageService {
@@ -19,6 +22,7 @@ export class StorageService {
   constructor(
     @InjectRepository(File)
     private fileRepository: Repository<File>,
+    private userQuotaService: UserQuotaService,
   ) {
     this.availableProviders = this.initializeProviders();
   }
@@ -33,7 +37,25 @@ export class StorageService {
     fileDetails?: FileMetadata;
   }> {
     try {
-      this.logger.log(`Uploading file ${metadata.filename} for user ${userId}`);
+      this.logger.log(
+        `Uploading file ${metadata.filename} for user ${userId}, size: ${file.size}`,
+      );
+
+      // Check if user has enough quota for this file
+      const hasQuota = await this.userQuotaService.hasEnoughQuota(
+        userId,
+        file.size,
+      );
+
+      if (!hasQuota) {
+        const quotaInfo = await this.userQuotaService.getQuotaInfo(userId);
+        const remainingMB = Math.floor(quotaInfo.remainingBytes / BYTES_IN_MB);
+        const fileSizeMB = Math.ceil(file.size / BYTES_IN_MB);
+
+        throw new QuotaExceededException(
+          `Monthly storage quota exceeded. You have ${remainingMB} MB remaining but tried to upload ${fileSizeMB} MB. Your quota will reset next month.`,
+        );
+      }
 
       const fileMetadata = await this.uploadFile(
         file.buffer,
@@ -42,6 +64,9 @@ export class StorageService {
         userId,
         metadata.description,
       );
+
+      // Update user quota after successful upload
+      await this.userQuotaService.incrementUsedQuota(userId, file.size);
 
       return {
         success: true,

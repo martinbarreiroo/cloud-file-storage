@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './entities/user/users.module';
 import { StorageModule } from './entities/file/storage.module';
+import { AdminModule } from './entities/admin/admin.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user/user.entity';
 import { File } from './entities/file/file.entity';
@@ -27,6 +28,7 @@ import { ConfigModule } from '@nestjs/config';
     AuthModule,
     UsersModule,
     StorageModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

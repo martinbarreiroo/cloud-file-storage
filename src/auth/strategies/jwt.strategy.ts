@@ -15,12 +15,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    await this.usersService.findOneById(payload.sub);
-
-    // Only return necessary user information, don't expose sensitive data
+    // Fetch the user from the database
+    const user = await this.usersService.findOneById(payload.sub);
+    if (!user) {
+      return null;
+    }
+    // Return the full user object with id, username, and email
     return {
-      userId: payload.sub,
-      email: payload.email,
+      id: user.id,
+      username: user.username,
+      email: user.email,
     };
   }
 }

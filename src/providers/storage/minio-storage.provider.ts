@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   StorageProvider,
   FileMetadata,
-} from '../interfaces/storage-provider-interface';
+} from '../../interfaces/storage-provider-interface';
 import { v4 as uuidv4 } from 'uuid';
 import * as Minio from 'minio';
 

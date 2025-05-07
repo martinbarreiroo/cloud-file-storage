@@ -8,7 +8,7 @@ import { AzureStorageProvider } from '../../providers/storage/azure-storage.prov
 import { MinioStorageProvider } from '../../providers/storage/minio-storage.provider';
 import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-
+import { UserQuotaService } from '../../service/user-quota.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([File, UserQuota]),
@@ -18,7 +18,12 @@ import { memoryStorage } from 'multer';
     }),
   ],
   controllers: [StorageController],
-  providers: [StorageService, AzureStorageProvider, MinioStorageProvider],
-  exports: [StorageService],
+  providers: [
+    StorageService,
+    AzureStorageProvider,
+    MinioStorageProvider,
+    UserQuotaService,
+  ],
+  exports: [StorageService, UserQuotaService],
 })
 export class StorageModule {}

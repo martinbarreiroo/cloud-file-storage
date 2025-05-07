@@ -8,10 +8,10 @@ import {
   Request,
   Logger,
   Get,
-  Param,
   NotFoundException,
   HttpStatus,
   HttpException,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -20,12 +20,12 @@ import { StorageService } from 'src/service/storage.service';
 import {
   ApiConsumes,
   ApiOperation,
-  ApiParam,
   ApiResponse,
   ApiTags,
+  ApiQuery,
 } from '@nestjs/swagger';
-import { AzureStorageProvider } from 'src/providers/azure-storage.provider';
-import { MinioStorageProvider } from 'src/providers/minio-storage.provider';
+import { AzureStorageProvider } from 'src/providers/storage/azure-storage.provider';
+import { MinioStorageProvider } from 'src/providers/storage/minio-storage.provider';
 import { RequestWithUser } from 'src/interfaces/user.interface';
 
 @ApiTags('storage')
@@ -163,22 +163,16 @@ export class StorageController {
   @Get('status')
   async checkProviders() {
     try {
-      // Check the status of both providers
+      // Check the status of all providers
       const status = await this.storageService.checkProviders();
 
       return {
         success: true,
         message: 'Provider status retrieved successfully',
-        providers: {
-          primary: {
-            name: this.storageService['primaryProvider'].getProviderName(),
-            status: status.primary ? 'available' : 'unavailable',
-          },
-          backup: {
-            name: this.storageService['backupProvider'].getProviderName(),
-            status: status.backup ? 'available' : 'unavailable',
-          },
-        },
+        providers: Object.entries(status).map(([name, available]) => ({
+          name,
+          status: available ? 'available' : 'unavailable',
+        })),
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -192,15 +186,15 @@ export class StorageController {
   }
 
   @ApiOperation({ summary: 'Get file metadata by ID' })
-  @ApiParam({ name: 'id', description: 'File ID' })
+  @ApiQuery({ name: 'id', description: 'File ID' })
   @ApiResponse({
     status: 200,
     description: 'File metadata retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'File not found' })
   @UseGuards(JwtAuthGuard)
-  @Get('files/:id')
-  async getFileById(@Param('id') id: string) {
+  @Get('file-data')
+  async getFileById(@Query('id') id: string) {
     const file = await this.storageService.getFileById(id);
 
     if (!file) {

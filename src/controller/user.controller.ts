@@ -21,6 +21,6 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Get()
   getUser(@Param() email: string) {
-    return this.userService.getUserByEmail(email);
+    return this.userService.findByEmail(email);
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UploadFileDto } from 'src/dto/file/upload-file-dto';
-import { AzureStorageProvider } from 'src/providers/azure-storage.provider';
-import { MinioStorageProvider } from 'src/providers/minio-storage.provider';
+import { AzureStorageProvider } from '../providers/storage/azure-storage.provider';
+import { MinioStorageProvider } from '../providers/storage/minio-storage.provider';
 import {
   StorageProvider,
   FileMetadata,
@@ -9,180 +9,123 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from 'src/entities/file/file.entity';
+import { StorageProviderEnum } from 'src/enums/storage-provider-enum';
 
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private primaryProvider: StorageProvider;
-  private backupProvider: StorageProvider;
+  private availableProviders: StorageProvider[] = [];
 
   constructor(
-    private azureStorageProvider: AzureStorageProvider,
-    private minioStorageProvider: MinioStorageProvider,
     @InjectRepository(File)
     private fileRepository: Repository<File>,
   ) {
-    this.primaryProvider = azureStorageProvider;
-    this.backupProvider = minioStorageProvider;
+    this.availableProviders = this.initializeProviders();
   }
 
   async upload(
     file: Express.Multer.File,
     metadata: UploadFileDto,
     userId: string,
-  ) {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    fileDetails?: FileMetadata;
+  }> {
     try {
       this.logger.log(`Uploading file ${metadata.filename} for user ${userId}`);
 
-      // First check if primary provider is available
-      let provider = this.primaryProvider;
-      let result: FileMetadata;
-
-      try {
-        const primaryAvailable = await this.primaryProvider.isAvailable();
-        if (!primaryAvailable) {
-          this.logger.warn(
-            `Primary provider (${this.primaryProvider.getProviderName()}) is not available. Trying backup provider (${this.backupProvider.getProviderName()}).`,
-          );
-          provider = this.backupProvider;
-        }
-
-        result = await provider.uploadFile(
-          file.buffer,
-          metadata.filename,
-          metadata.contentType,
-          userId,
-          metadata.description,
-        );
-
-        // Save file metadata to database
-        await this.saveFileMetadata(result);
-      } catch (error: unknown) {
-        // If primary provider failed, try the backup provider
-        if (provider === this.primaryProvider) {
-          this.logger.warn(
-            `Upload with primary provider failed: ${error instanceof Error ? error.message : String(error)}. Trying backup provider.`,
-          );
-          provider = this.backupProvider;
-
-          // Try upload with backup provider
-          result = await provider.uploadFile(
-            file.buffer,
-            metadata.filename,
-            metadata.contentType,
-            userId,
-            metadata.description,
-          );
-
-          // Save file metadata to database
-          await this.saveFileMetadata(result);
-        } else {
-          throw error;
-        }
-      }
+      const fileMetadata = await this.uploadFile(
+        file.buffer,
+        metadata.filename,
+        metadata.contentType,
+        userId,
+        metadata.description,
+      );
 
       return {
         success: true,
-        message: `File uploaded successfully to ${provider.getProviderName()}`,
-        fileDetails: result,
+        message: `File uploaded successfully to ${fileMetadata.provider}`,
+        fileDetails: fileMetadata,
       };
-    } catch (error: unknown) {
-      this.logger.error(
-        `Failed to upload file: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to upload file: ${errorMessage}`);
       return {
         success: false,
-        message: `Failed to upload file: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Failed to upload file: ${errorMessage}`,
       };
     }
   }
 
-  async saveFileMetadata(metadata: FileMetadata): Promise<FileMetadata> {
-    try {
-      const fileEntity = new File();
-      fileEntity.id = metadata.id;
-      fileEntity.filename = metadata.filename;
-      fileEntity.contentType = metadata.contentType;
-      fileEntity.size = metadata.size;
-      fileEntity.userId = metadata.userId;
-      fileEntity.path = metadata.path;
-      fileEntity.provider = metadata.provider;
-      fileEntity.url = metadata.url;
-      fileEntity.description = metadata.description;
-      fileEntity.createdAt = metadata.createdAt;
-      fileEntity.updatedAt = metadata.updatedAt;
-
-      const savedEntity = await this.fileRepository.save(fileEntity);
-      return this.mapFileEntityToMetadata(savedEntity);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      this.logger.error(`Failed to save file metadata: ${errorMessage}`);
-      throw new Error(`Failed to save file metadata: ${errorMessage}`);
-    }
-  }
-
-  async updateFileMetadata(
-    fileId: string,
-    metadata: Partial<FileMetadata>,
+  private async uploadFile(
+    file: Buffer,
+    filename: string,
+    contentType: string,
+    userId: string,
+    description?: string,
   ): Promise<FileMetadata> {
-    try {
-      const fileEntity = await this.fileRepository.findOne({
-        where: { id: fileId },
-      });
+    let lastError: Error | null = null;
 
-      if (!fileEntity) {
-        throw new Error(`File with id ${fileId} not found`);
+    // Try each provider in sequence until one succeeds
+    for (const provider of this.availableProviders) {
+      try {
+        const isAvailable = await provider.isAvailable();
+        if (!isAvailable) {
+          this.logger.warn(
+            `Provider ${provider.getProviderName()} is not available, trying next provider...`,
+          );
+          continue;
+        }
+
+        const metadata = await provider.uploadFile(
+          file,
+          filename,
+          contentType,
+          userId,
+          description,
+        );
+
+        // Save file metadata to database
+        const fileEntity = this.fileRepository.create({
+          id: metadata.id,
+          filename: metadata.filename,
+          contentType: metadata.contentType,
+          size: metadata.size,
+          path: metadata.path,
+          provider: metadata.provider,
+          url: metadata.url,
+          description: metadata.description,
+          userId,
+        });
+
+        await this.fileRepository.save(fileEntity);
+        return metadata;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(
+          `Failed to upload using ${provider.getProviderName()}: ${lastError.message}`,
+        );
       }
-
-      // Update only provided fields
-      if (metadata.filename) fileEntity.filename = metadata.filename;
-      if (metadata.description) fileEntity.description = metadata.description;
-      if (metadata.path) fileEntity.path = metadata.path;
-      if (metadata.url) fileEntity.url = metadata.url;
-      fileEntity.updatedAt = new Date();
-
-      const updatedEntity = await this.fileRepository.save(fileEntity);
-      return this.mapFileEntityToMetadata(updatedEntity);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      this.logger.error(`Failed to update file metadata: ${errorMessage}`);
-      throw new Error(`Failed to update file metadata: ${errorMessage}`);
     }
+
+    // If we get here, all providers failed
+    throw new Error(
+      `All storage providers failed. Last error: ${lastError?.message}`,
+    );
   }
 
-  private mapFileEntityToMetadata(fileEntity: File): FileMetadata {
-    const metadata: FileMetadata = {
-      id: fileEntity.id,
-      filename: fileEntity.filename,
-      contentType: fileEntity.contentType,
-      size: fileEntity.size,
-      userId: fileEntity.userId,
-      path: fileEntity.path,
-      provider: fileEntity.provider,
-      url: fileEntity.url,
-      description: fileEntity.description,
-      createdAt: fileEntity.createdAt,
-      updatedAt: fileEntity.updatedAt,
-    };
+  // Method to check availability of all providers
+  async checkProviders(): Promise<Record<string, boolean>> {
+    const availability: Record<string, boolean> = {};
 
-    return metadata;
-  }
+    for (const provider of this.availableProviders) {
+      const isAvailable = await provider.isAvailable().catch(() => false);
+      availability[provider.getProviderName()] = isAvailable;
+    }
 
-  // Method to check availability of both providers
-  async checkProviders(): Promise<{ primary: boolean; backup: boolean }> {
-    const primaryAvailable = await this.primaryProvider
-      .isAvailable()
-      .catch(() => false);
-    const backupAvailable = await this.backupProvider
-      .isAvailable()
-      .catch(() => false);
-
-    return {
-      primary: primaryAvailable,
-      backup: backupAvailable,
-    };
+    return availability;
   }
 
   // Get file metadata from database
@@ -197,5 +140,24 @@ export class StorageService {
   // List all files for a user
   async listUserFiles(userId: string): Promise<File[]> {
     return this.fileRepository.find({ where: { userId } });
+  }
+
+  private initializeProviders(): StorageProvider[] {
+    return Object.values(StorageProviderEnum).map((providerType) => {
+      switch (providerType) {
+        case StorageProviderEnum.AZURE:
+          return new AzureStorageProvider();
+        case StorageProviderEnum.MINIO:
+          return new MinioStorageProvider();
+        default: {
+          // This will cause a compile-time error if we add a new enum value
+          // without handling it in the switch statement
+          const exhaustiveCheck: never = providerType;
+          throw new Error(
+            `Unhandled provider type: ${String(exhaustiveCheck)}`,
+          );
+        }
+      }
+    });
   }
 }

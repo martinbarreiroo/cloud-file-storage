@@ -11,12 +11,14 @@ export class UploadFileDto {
   filename: string;
 
   @ApiProperty({
-    description: 'Content type of the file',
+    description:
+      'Optional: Content type of the file. If not provided, it will be auto-detected on the backend.',
     example: 'application/pdf',
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  contentType: string;
+  contentType?: string;
 
   @ApiProperty({
     description: 'Optional description of the file',

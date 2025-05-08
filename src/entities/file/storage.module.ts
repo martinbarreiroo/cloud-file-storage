@@ -5,7 +5,6 @@ import { UserQuota } from './user-quota.entity';
 import { StorageService } from '../../service/storage.service';
 import { StorageController } from '../../controller/storage.controller';
 import { AzureStorageProvider } from '../../providers/storage/azure-storage.provider';
-import { MinioStorageProvider } from '../../providers/storage/minio-storage.provider';
 import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UserQuotaService } from '../../service/user-quota.service';
@@ -18,12 +17,7 @@ import { UserQuotaService } from '../../service/user-quota.service';
     }),
   ],
   controllers: [StorageController],
-  providers: [
-    StorageService,
-    AzureStorageProvider,
-    MinioStorageProvider,
-    UserQuotaService,
-  ],
+  providers: [StorageService, AzureStorageProvider, UserQuotaService],
   exports: [StorageService, UserQuotaService],
 })
 export class StorageModule {}

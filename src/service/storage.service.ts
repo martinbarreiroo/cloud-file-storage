@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { UploadFileDto } from 'src/dto/file/upload-file-dto';
 import { AzureStorageProvider } from '../providers/storage/azure-storage.provider';
-import { MinioStorageProvider } from '../providers/storage/minio-storage.provider';
+import { S3StorageProvider } from '../providers/storage/s3-storage.provider';
 import {
   StorageProvider,
   FileMetadata,
@@ -255,10 +255,10 @@ export class StorageService {
   private initializeProviders(): StorageProvider[] {
     return Object.values(StorageProviderEnum).map((providerType) => {
       switch (providerType) {
+        case StorageProviderEnum.S3:
+          return new S3StorageProvider();
         case StorageProviderEnum.AZURE:
           return new AzureStorageProvider();
-        case StorageProviderEnum.MINIO:
-          return new MinioStorageProvider();
         default: {
           // This will cause a compile-time error if we add a new enum value
           // without handling it in the switch statement

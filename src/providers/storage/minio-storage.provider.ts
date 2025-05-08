@@ -5,6 +5,7 @@ import {
 } from '../../interfaces/storage-provider-interface';
 import { v4 as uuidv4 } from 'uuid';
 import * as Minio from 'minio';
+import { Readable } from 'stream';
 
 @Injectable()
 export class MinioStorageProvider implements StorageProvider {
@@ -134,6 +135,26 @@ export class MinioStorageProvider implements StorageProvider {
         `Failed to upload file to MinIO: ${
           error instanceof Error ? error.message : String(error)
         }`,
+      );
+      throw error;
+    }
+  }
+
+  async downloadFileStream(filePath: string): Promise<Readable> {
+    try {
+      if (!this.minioClient) {
+        throw new Error('MinIO client not initialized');
+      }
+      const stream = await this.minioClient.getObject(
+        this.bucketName,
+        filePath,
+      );
+      return stream;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to download file from MinIO ${filePath}: ${errorMessage}`,
       );
       throw error;
     }

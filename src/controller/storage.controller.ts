@@ -11,6 +11,9 @@ import {
   HttpStatus,
   HttpException,
   Query,
+  Res,
+  Logger,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -22,12 +25,17 @@ import {
   ApiResponse,
   ApiTags,
   ApiQuery,
+  ApiBearerAuth,
+  ApiParam,
 } from '@nestjs/swagger';
 import { RequestWithUser } from 'src/interfaces/user.interface';
+import { Response } from 'express';
 
 @ApiTags('storage')
 @Controller('storage')
 export class StorageController {
+  private readonly logger = new Logger(StorageController.name);
+
   constructor(private storageService: StorageService) {}
 
   @ApiOperation({ summary: 'Upload a file to cloud storage' })
@@ -46,7 +54,6 @@ export class StorageController {
     @Body() metadata: UploadFileDto,
     @Request() req: RequestWithUser,
   ) {
-    // Access id from JWT user object
     const result = await this.storageService.upload(
       file,
       metadata,
@@ -65,7 +72,6 @@ export class StorageController {
   @Get('status')
   async checkProviders() {
     try {
-      // Check the status of all providers
       const status = await this.storageService.checkProviders();
 
       return {
@@ -132,6 +138,51 @@ export class StorageController {
         message: `Failed to list files: ${errorMessage}`,
       };
       throw new HttpException(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @ApiOperation({ summary: 'Download a file' })
+  @ApiResponse({ status: 200, description: 'File downloaded successfully' })
+  @ApiResponse({ status: 404, description: 'File not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiBearerAuth()
+  @ApiParam({ name: 'fileId', description: 'The ID of the file to download' })
+  @UseGuards(JwtAuthGuard)
+  @Get('download')
+  async downloadFile(
+    @Query('fileId') fileId: string,
+    @Request() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    try {
+      const { stream, metadata } =
+        await this.storageService.getDownloadableFileData(fileId, req.user.id);
+
+      res.setHeader('Content-Type', metadata.contentType);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${metadata.filename}"`,
+      );
+      return new StreamableFile(stream);
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw new HttpException(
+          'File not found or access denied',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (error instanceof HttpException) {
+        if (error.getStatus() === (HttpStatus.FORBIDDEN as number)) {
+          throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
+        }
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error downloading file ${fileId}: ${errorMessage}`);
+      throw new HttpException(
+        'Failed to download file',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }

@@ -7,7 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   BlobServiceClient,
   StorageSharedKeyCredential,
+  BlobDownloadResponseParsed,
 } from '@azure/storage-blob';
+import { Readable } from 'stream';
 
 @Injectable()
 export class AzureStorageProvider implements StorageProvider {
@@ -128,6 +130,33 @@ export class AzureStorageProvider implements StorageProvider {
         `Failed to upload file to Azure: ${
           error instanceof Error ? error.message : String(error)
         }`,
+      );
+      throw error;
+    }
+  }
+
+  async downloadFileStream(filePath: string): Promise<Readable> {
+    try {
+      if (!this.blobServiceClient) {
+        throw new Error('Azure Blob Storage client not initialized');
+      }
+      const containerClient = this.blobServiceClient.getContainerClient(
+        this.containerName,
+      );
+      const blockBlobClient = containerClient.getBlockBlobClient(filePath);
+
+      const downloadResponse: BlobDownloadResponseParsed =
+        await blockBlobClient.download(0);
+
+      if (!downloadResponse.readableStreamBody) {
+        throw new Error('Readable stream body not available for Azure blob.');
+      }
+      return downloadResponse.readableStreamBody as Readable;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to download file from Azure ${filePath}: ${errorMessage}`,
       );
       throw error;
     }

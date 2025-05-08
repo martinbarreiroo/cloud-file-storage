@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 export interface FileMetadata {
   id: string;
   filename: string;
@@ -24,4 +26,6 @@ export interface StorageProvider {
     userId: string,
     description?: string,
   ): Promise<FileMetadata>;
+
+  downloadFileStream(filePath: string): Promise<Readable>;
 }

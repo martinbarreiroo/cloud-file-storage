@@ -3,7 +3,7 @@ version: '3.8'
 services:
   api:
     container_name: cloud-file-storage
-    image: ghcr.io/martinbarreiroo/cloud-file-storage
+    image: ghcr.io/martinbarreiroo/cloud-file-storage:latest
     ports:
       - "8000:8080"
     environment:

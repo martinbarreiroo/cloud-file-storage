@@ -12,6 +12,11 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('test')
+  getTestCd() {
+    return 'This is an endpoint to test your cd';
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('protected')
   getProtected(@Request() req: RequestWithUser) {

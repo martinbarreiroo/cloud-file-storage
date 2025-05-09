@@ -1,28 +1,40 @@
 # Stage 1: Build the application
-FROM node:20-alpine AS build
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Copy package files and install dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Copy source and build
+# Copy source code
 COPY . .
+
+# Build the application
 RUN npm run build
 
-# Stage 2: Production image
-FROM node:20-alpine
+# Stage 2: Run the application
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Copy only what's needed
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./
-
+# Set NODE_ENV to production
 ENV NODE_ENV=production
 
+# Copy package files and install production dependencies only
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy the built application from the builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/nest-cli.json ./
+
+# Copy any additional necessary files
+COPY --from=builder /app/tsconfig.json ./
+COPY --from=builder /app/tsconfig.build.json ./
+
+# Expose the API port
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+# Start the application
+CMD ["node", "dist/src/main.js"] 

@@ -19,6 +19,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      
+      - name: Set up test database
+        run: docker-compose up db-test -d
+      - name: Wait for DB to be ready
+        run: sleep 10
           
       - name: Install dependencies
         run: npm ci
@@ -31,6 +36,9 @@ jobs:
         
       - name: Run tests
         run: npm test
+
+      - name: Run e2e tests
+        run: npm run test:e2e
         
       - name: Build project
         run: npm run build

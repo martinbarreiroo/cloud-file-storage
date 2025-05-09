@@ -4,17 +4,17 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { UploadFileDto } from 'src/dto/file/upload-file-dto';
+import { UploadFileDto } from '../dto/file/upload-file-dto';
 import { AzureStorageProvider } from '../providers/storage/azure-storage.provider';
 import { S3StorageProvider } from '../providers/storage/s3-storage.provider';
 import {
   StorageProvider,
   FileMetadata,
-} from 'src/interfaces/storage-provider-interface';
+} from '../interfaces/storage-provider-interface';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { File as FileEntity } from 'src/entities/file/file.entity';
-import { StorageProviderEnum } from 'src/enums/storage-provider.enum';
+import { File as FileEntity } from '../entities/file/file.entity';
+import { StorageProviderEnum } from '../enums/storage-provider.enum';
 import { UserQuotaService } from './user-quota.service';
 import { QuotaExceededException } from '../exceptions/quota-exceeded.exception';
 import { BYTES_IN_MB } from '../constants/quota.constants';

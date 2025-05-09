@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { UserRolesEnum } from 'src/enums/user-roles.enum';
+import { UserRolesEnum } from '../enums/user-roles.enum';
 
 export interface JwtUser {
   id: string;

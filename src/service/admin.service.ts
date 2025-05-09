@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User } from 'src/entities/user/user.entity';
-import { UserQuota } from 'src/entities/file/user-quota.entity';
+import { User } from '../entities/user/user.entity';
+import { UserQuota } from '../entities/file/user-quota.entity';
 import { Repository, In } from 'typeorm';
-import { File } from 'src/entities/file/file.entity';
-import { BYTES_IN_MB, BYTES_IN_GB } from 'src/constants/quota.constants';
+import { File } from '../entities/file/file.entity';
+import { BYTES_IN_MB, BYTES_IN_GB } from '../constants/quota.constants';
 
 interface UserStorageStats {
   userId: string;

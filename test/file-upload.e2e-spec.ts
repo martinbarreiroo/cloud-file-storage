@@ -115,7 +115,7 @@ describe('File Upload (e2e)', () => {
       const loginResponse = await request(app.getHttpServer())
         .post('/auth/login')
         .send({
-          username: testUser.username,
+          email: testUser.email,
           password: testUser.password,
         })
         .expect(200);

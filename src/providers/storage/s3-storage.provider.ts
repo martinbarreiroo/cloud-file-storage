@@ -9,6 +9,7 @@ import {
   S3Client,
   HeadBucketCommand,
   GetObjectCommand,
+  S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 
@@ -18,6 +19,8 @@ export class S3StorageProvider implements StorageProvider {
   private s3Client: S3Client;
   private bucketName: string;
   private region: string;
+  private endpoint: string | undefined;
+  private isMinIO: boolean = false;
 
   constructor() {
     // Get AWS S3 credentials from environment variables
@@ -25,22 +28,48 @@ export class S3StorageProvider implements StorageProvider {
     const accessKeyId = process.env.AWS_ACCESS_KEY_ID || '';
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '';
     this.bucketName = process.env.AWS_S3_BUCKET_NAME || '';
+    this.endpoint = process.env.AWS_ENDPOINT;
+    this.isMinIO = !!this.endpoint;
+
+    // Debug log all environment variables for diagnosing issues
+    this.logger.log('S3 Provider Environment Variables:');
+    this.logger.log(`AWS_REGION: ${this.region}`);
+    this.logger.log(`AWS_S3_BUCKET_NAME: ${this.bucketName}`);
+    this.logger.log(`AWS_ENDPOINT: ${this.endpoint}`);
+    this.logger.log(
+      `AWS_ACCESS_KEY_ID: ${accessKeyId ? '[REDACTED]' : 'not set'}`,
+    );
+    this.logger.log(
+      `AWS_SECRET_ACCESS_KEY: ${secretAccessKey ? '[REDACTED]' : 'not set'}`,
+    );
+    this.logger.log(`isMinIO: ${this.isMinIO}`);
 
     if (!accessKeyId || !secretAccessKey || !this.bucketName) {
       this.logger.warn(
         'AWS S3 credentials or bucket name not found in environment variables',
       );
     } else {
-      // Create the S3 client
-      this.s3Client = new S3Client({
+      // Create the S3 client with optional endpoint for MinIO
+      const clientConfig: S3ClientConfig = {
         region: this.region,
         credentials: {
           accessKeyId,
           secretAccessKey,
         },
-      });
+      };
 
-      this.logger.log('AWS S3 Storage Provider initialized successfully');
+      // If endpoint is provided (for MinIO), add it to the config
+      if (this.endpoint) {
+        clientConfig.endpoint = this.endpoint;
+        clientConfig.forcePathStyle = true; // Required for MinIO
+        this.logger.log(`Using custom S3 endpoint: ${this.endpoint}`);
+      }
+
+      this.s3Client = new S3Client(clientConfig);
+
+      this.logger.log(
+        `S3 Storage Provider initialized successfully (${this.isMinIO ? 'MinIO' : 'AWS S3'})`,
+      );
     }
   }
 
@@ -100,7 +129,14 @@ export class S3StorageProvider implements StorageProvider {
       await upload.done();
 
       const size = file.length;
-      const fileUrl = `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+
+      // Generate URL based on whether we're using MinIO or S3
+      let fileUrl: string;
+      if (this.isMinIO && this.endpoint) {
+        fileUrl = `${this.endpoint}/${this.bucketName}/${key}`;
+      } else {
+        fileUrl = `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+      }
 
       return {
         id: fileId,

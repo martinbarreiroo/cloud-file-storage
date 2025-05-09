@@ -2,7 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserQuotaService } from './user-quota.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserQuota } from '../entities/file/user-quota.entity';
-import { QUOTA_LIMIT } from '../constants/quota.constants';
+
+// Constants
+const TEST_QUOTA_LIMIT = 5 * 1024 * 1024 * 1024; // 5 GB - match the actual QUOTA_LIMIT
 
 // Define a test version of UserQuota that allows null user
 interface TestUserQuota extends Omit<UserQuota, 'user'> {
@@ -122,8 +124,8 @@ describe('UserQuotaService', () => {
   describe('hasEnoughQuota', () => {
     it('should return true if user has enough quota', async () => {
       // Arrange
-      const fileSizeBytes = 1000;
-      const usedBytes = QUOTA_LIMIT - 2000; // 2000 bytes remaining
+      const fileSizeBytes = 1000000;
+      const usedBytes = TEST_QUOTA_LIMIT - 2000000;
 
       const quotaWithEnoughSpace: TestUserQuota = {
         id: 'quota-id-1',
@@ -149,8 +151,8 @@ describe('UserQuotaService', () => {
 
     it('should return false if user does not have enough quota', async () => {
       // Arrange
-      const fileSizeBytes = 2000;
-      const usedBytes = QUOTA_LIMIT - 1000; // 1000 bytes remaining
+      const fileSizeBytes = 2 * 1024 * 1024;
+      const usedBytes = TEST_QUOTA_LIMIT - 1024 * 1024; // 1000000 bytes remaining
 
       const quotaWithInsufficientSpace: TestUserQuota = {
         id: 'quota-id-1',
@@ -178,8 +180,8 @@ describe('UserQuotaService', () => {
   describe('incrementUsedQuota', () => {
     it('should correctly increment the used quota', async () => {
       // Arrange
-      const initialUsedBytes = 1000;
-      const fileSizeBytes = 500;
+      const initialUsedBytes = 1024 * 1024;
+      const fileSizeBytes = 1024 * 512;
       const expectedUsedBytes = initialUsedBytes + fileSizeBytes;
 
       const quota: TestUserQuota = {
@@ -240,9 +242,9 @@ describe('UserQuotaService', () => {
       // Assert
       expect(result).toEqual({
         usedBytes,
-        totalBytes: QUOTA_LIMIT,
-        remainingBytes: QUOTA_LIMIT - usedBytes,
-        percentUsed: (usedBytes / QUOTA_LIMIT) * 100,
+        totalBytes: TEST_QUOTA_LIMIT,
+        remainingBytes: TEST_QUOTA_LIMIT - usedBytes,
+        percentUsed: (usedBytes / TEST_QUOTA_LIMIT) * 100,
       });
     });
   });

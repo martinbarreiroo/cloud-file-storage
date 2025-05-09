@@ -18,7 +18,8 @@ import { ConfigModule } from '@nestjs/config';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      // Load .env file but override with test values
+      // Load .env.test file explicitly for test environment
+      envFilePath: '.env.test',
       isGlobal: true,
     }),
     TypeOrmModule.forRoot({

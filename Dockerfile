@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM node:18-alpine AS build
+FROM node:20-alpine AS build
 
 WORKDIR /usr/src/app
 
@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Runtime environment
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /usr/src/app
 

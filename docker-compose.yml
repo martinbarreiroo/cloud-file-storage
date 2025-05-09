@@ -43,7 +43,6 @@ services:
       POSTGRES_DB: ${DB_TEST_NAME:-cloud-file-storage-test}
     env_file:
       - .env.test
-      - .env
     volumes:
       - pgdata-test:/var/lib/postgresql/cloud-file-storage-test-data
     restart: always

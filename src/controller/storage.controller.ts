@@ -16,9 +16,9 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { UploadFileDto } from 'src/dto/file/upload-file-dto';
-import { StorageService } from 'src/service/storage.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UploadFileDto } from '../dto/file/upload-file-dto';
+import { StorageService } from '../service/storage.service';
 import {
   ApiConsumes,
   ApiOperation,
@@ -28,7 +28,7 @@ import {
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
-import { RequestWithUser } from 'src/interfaces/user.interface';
+import { RequestWithUser } from '../interfaces/user.interface';
 import { Response } from 'express';
 
 @ApiTags('storage')

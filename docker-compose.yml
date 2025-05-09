@@ -17,22 +17,8 @@ services:
       - .env
     restart: always
 
-  minio:
-    image: docker.io/bitnami/minio:2024
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    networks:
-      - minionetwork
-    volumes:
-      - 'minio_data:/data'
-    environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_DEFAULT_BUCKETS=${MINIO_BUCKET_NAME}
-
-  db:
-    container_name: cloud-file-storage-db
+  db-dev:
+    container_name: cloud-file-storage-db-dev
     image: postgres:latest
     ports:
       - "5432:5432"
@@ -43,7 +29,22 @@ services:
     env_file:
       - .env
     volumes:
-      - pgdata:/var/lib/postgresql/cloud-file-storage-data
+      - pgdata-dev:/var/lib/postgresql/cloud-file-storage-data
+    restart: always
+
+  db-test:
+    container_name: cloud-file-storage-db-test
+    image: postgres:latest
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${DB_TEST_USER:-test}
+      POSTGRES_PASSWORD: ${DB_TEST_PASSWORD:-test}
+      POSTGRES_DB: ${DB_TEST_NAME:-cloud-file-storage-test}
+    env_file:
+      - .env.test
+    volumes:
+      - pgdata-test:/var/lib/postgresql/cloud-file-storage-test-data
     restart: always
 
 networks:
@@ -51,6 +52,7 @@ networks:
     driver: bridge
 
 volumes:
-  minio_data:
+  pgdata-dev:
     driver: local
-  pgdata:
+  pgdata-test:
+    driver: local

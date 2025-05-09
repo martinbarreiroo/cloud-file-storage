@@ -20,8 +20,20 @@ jobs:
           node-version: '20'
           cache: 'npm'
       
+      - name: Create .env.test file
+        run: |
+          echo "# Test database configuration" > .env.test
+          echo "DB_TEST_USER=test" >> .env.test
+          echo "DB_TEST_PASSWORD=test" >> .env.test
+          echo "DB_TEST_NAME=cloud-file-storage-test" >> .env.test
+          echo "DB_TEST_HOST=localhost" >> .env.test
+          echo "DB_TEST_PORT=5433" >> .env.test
+          echo "NODE_ENV=test" >> .env.test
+      
       - name: Set up test database
+        # Use Docker Compose V2 format which is pre-installed on GitHub runners
         run: docker compose up db-test -d
+        
       - name: Wait for DB to be ready
         run: sleep 10
           
@@ -54,6 +66,16 @@ jobs:
   #       with:
   #         node-version: '20'
   #         cache: 'npm'
+  #     
+  #     - name: Create .env.test file
+  #       run: |
+  #         echo "# Test database configuration" > .env.test
+  #         echo "DB_TEST_USER=test" >> .env.test
+  #         echo "DB_TEST_PASSWORD=test" >> .env.test
+  #         echo "DB_TEST_NAME=cloud-file-storage-test" >> .env.test
+  #         echo "DB_TEST_HOST=localhost" >> .env.test
+  #         echo "DB_TEST_PORT=5433" >> .env.test
+  #         echo "NODE_ENV=test" >> .env.test
   #     
   #     - name: Start test database
   #       run: docker compose up db-test -d

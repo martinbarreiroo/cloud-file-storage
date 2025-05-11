@@ -1,0 +1,45 @@
+@startuml
+title File Download Sequence Diagram (URL Approach)
+
+actor Client
+participant "API Gateway" as APIGateway
+participant "Authentication Service" as AuthService
+participant "Storage Service" as StorageService
+participant "Database" as DB
+participant "AWS S3 SDK" as S3SDK
+participant "Azure Blob SDK" as AzureSDK
+
+Client -> APIGateway: Request Download URL (file ID)
+APIGateway -> AuthService: Validate Token
+AuthService --> APIGateway: Token ValidatedAPIGateway -> StorageService: Get Download URL Request (file ID, userId)
+
+StorageService -> DB: Get File Metadata (file ID)
+DB --> StorageService: File Metadata (path, provider, ownerUserId)
+
+alt User Authorized and File Exists
+    alt Provider is S3
+        StorageService -> S3SDK: Generate Pre-signed URL (bucket, path, expiration)
+        S3SDK --> StorageService: Pre-signed URL
+        StorageService --> APIGateway: Download URL (pre-signed/SAS URL)
+        APIGateway --> Client: Download URL
+    else Provider is Azure
+        StorageService -> AzureSDK: Generate SAS URL (container, path, expiration, permissions)
+        AzureSDK --> StorageService: SAS URL
+        StorageService --> APIGateway: Download URL (pre-signed/SAS URL)
+        APIGateway --> Client: Download URL
+    else Provider Not Found or Error
+        StorageService --> APIGateway: Error (e.g., Provider not found, URL generation failed)
+        APIGateway --> Client: Error Response
+    end
+else User Not Authorized or File Not Found
+    StorageService --> APIGateway: Error (e.g., File not found, Access denied)
+    APIGateway --> Client: Error Response
+end
+
+
+note right of Client
+  Client then uses this URL to download
+  the file directly from the Cloud Storage Provider.
+end note
+
+@enduml 

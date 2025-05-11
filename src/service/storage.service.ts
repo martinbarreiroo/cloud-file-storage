@@ -18,7 +18,6 @@ import { StorageProviderEnum } from '../enums/storage-provider.enum';
 import { UserQuotaService } from './user-quota.service';
 import { QuotaExceededException } from '../exceptions/quota-exceeded.exception';
 import { BYTES_IN_MB } from '../constants/quota.constants';
-import { Readable } from 'stream';
 import * as fileType from 'file-type';
 
 @Injectable()
@@ -192,13 +191,10 @@ export class StorageService {
     return this.fileRepository.find({ where: { userId } });
   }
 
-  async getDownloadableFileData(
+  async getDownloadUrlData(
     fileId: string,
     userId: string,
-  ): Promise<{
-    stream: Readable;
-    metadata: { filename: string; contentType: string };
-  }> {
+  ): Promise<{ downloadUrl: string; filename: string; contentType: string }> {
     const fileEntity = await this.fileRepository.findOne({
       where: { id: fileId },
     });
@@ -214,41 +210,45 @@ export class StorageService {
     const provider = this.availableProviders.find(
       (p) => p.getProviderName() === fileEntity.provider,
     );
+
     if (!provider) {
       this.logger.error(
         `Storage provider ${fileEntity.provider} not found for file ${fileId}`,
       );
-      throw new Error(`Storage provider ${fileEntity.provider} not found.`);
+      throw new Error(
+        `Storage provider ${fileEntity.provider} not found for file ${fileId}.`,
+      );
     }
 
-    if (!provider.downloadFileStream) {
+    if (!provider.generateDownloadUrl) {
       this.logger.error(
-        `downloadFileStream method not implemented for provider ${fileEntity.provider}`,
+        `generateDownloadUrl method not implemented for provider ${fileEntity.provider}`,
       );
       throw new Error(
-        `downloadFileStream method not implemented for provider ${fileEntity.provider}`,
+        `generateDownloadUrl method not implemented for provider ${fileEntity.provider}.`,
       );
     }
 
     try {
-      const stream = await provider.downloadFileStream(fileEntity.path);
+      const downloadUrl = await provider.generateDownloadUrl(
+        fileEntity.path, // filePath for the provider
+        fileEntity.filename, // original filename for Content-Disposition
+      );
       this.logger.log(
-        `File ${fileEntity.filename} downloaded from provider ${fileEntity.provider}`,
+        `Generated download URL for file ${fileEntity.filename} from provider ${fileEntity.provider}`,
       );
       return {
-        stream,
-        metadata: {
-          filename: fileEntity.filename,
-          contentType: fileEntity.contentType,
-        },
+        downloadUrl,
+        filename: fileEntity.filename,
+        contentType: fileEntity.contentType, // Still useful for the client if needed
       };
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Error downloading file ${fileId} from provider ${fileEntity.provider}: ${errorMessage}`,
+        `Error generating download URL for ${fileId} from provider ${fileEntity.provider}: ${errorMessage}`,
       );
-      throw new Error('Failed to download file from storage provider.');
+      throw new Error('Failed to generate download URL from storage provider.');
     }
   }
 

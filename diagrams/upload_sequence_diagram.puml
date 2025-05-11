@@ -1,0 +1,46 @@
+@startuml
+title File Upload Sequence Diagram
+
+actor Client
+participant "API Gateway" as APIGateway
+participant "Authentication Service" as AuthService
+participant "Storage Service" as StorageService
+participant "UserQuotaService" as UserQuotaService
+participant "AWS S3" as S3
+participant "Azure Blob Storage" as AzureBlob
+participant "Database" as DB
+
+Client -> APIGateway: Upload Request (file, metadata)
+APIGateway -> AuthService: Validate Token
+AuthService --> APIGateway: Token Validated
+APIGateway -> StorageService: Store File (file, metadata, userId)
+
+StorageService -> UserQuotaService: HasEnoughQuota? (userId, fileSize)
+UserQuotaService --> StorageService: QuotaAvailable (true/false)
+
+alt Quota Available
+    alt S3 Upload Attempt
+        StorageService -> S3: Store File Object
+        S3 --> StorageService: File Object Stored (URL/ID, provider='S3')
+        StorageService -> DB: Store Metadata (file info, URL/ID, provider='S3', size)
+        DB --> StorageService: Metadata Stored
+        StorageService -> UserQuotaService: IncrementUsedQuota (userId, fileSize)
+        UserQuotaService --> StorageService: Quota Updated
+    else Azure Blob Upload Attempt (e.g. S3 failed or was unavailable)
+        StorageService -> AzureBlob: Store File Object
+        AzureBlob --> StorageService: File Object Stored (URL/ID, provider='Azure')
+        StorageService -> DB: Store Metadata (file info, URL/ID, provider='Azure', size)
+        DB --> StorageService: Metadata Stored
+        StorageService -> UserQuotaService: IncrementUsedQuota (userId, fileSize)
+        UserQuotaService --> StorageService: Quota Updated
+    else All Providers Failed
+        StorageService --> APIGateway: Upload Failed (All providers failed)
+    end
+    StorageService --> APIGateway: Upload Successful (file URL/ID, provider)
+else Quota Exceeded
+    StorageService --> APIGateway: Upload Failed (Quota Exceeded)
+end
+
+APIGateway --> Client: Upload Response (Success/Failure)
+
+@enduml 

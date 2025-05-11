@@ -4,7 +4,6 @@ import {
   FileMetadata,
 } from '../../interfaces/storage-provider-interface';
 import { v4 as uuidv4 } from 'uuid';
-import { Readable } from 'stream';
 import {
   S3Client,
   HeadBucketCommand,
@@ -12,6 +11,7 @@ import {
   S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class S3StorageProvider implements StorageProvider {
@@ -21,6 +21,7 @@ export class S3StorageProvider implements StorageProvider {
   private region: string;
   private endpoint: string | undefined;
   private isMinIO: boolean = false;
+  private signedUrlExpiresIn: number = 3600;
 
   constructor() {
     // Get AWS S3 credentials from environment variables
@@ -30,6 +31,10 @@ export class S3StorageProvider implements StorageProvider {
     this.bucketName = process.env.AWS_S3_BUCKET_NAME || '';
     this.endpoint = process.env.AWS_ENDPOINT;
     this.isMinIO = !!this.endpoint;
+    this.signedUrlExpiresIn = parseInt(
+      process.env.AWS_SIGNED_URL_EXPIRES_IN || '3600',
+      10,
+    );
 
     // Debug log all environment variables for diagnosing issues
     this.logger.log('S3 Provider Environment Variables:');
@@ -43,6 +48,7 @@ export class S3StorageProvider implements StorageProvider {
       `AWS_SECRET_ACCESS_KEY: ${secretAccessKey ? '[REDACTED]' : 'not set'}`,
     );
     this.logger.log(`isMinIO: ${this.isMinIO}`);
+    this.logger.log(`AWS_SIGNED_URL_EXPIRES_IN: ${this.signedUrlExpiresIn}`);
 
     if (!accessKeyId || !secretAccessKey || !this.bucketName) {
       this.logger.warn(
@@ -161,31 +167,35 @@ export class S3StorageProvider implements StorageProvider {
     }
   }
 
-  async downloadFileStream(filePath: string): Promise<Readable> {
+  async generateDownloadUrl(
+    filePath: string,
+    filename: string,
+  ): Promise<string> {
     if (!this.s3Client || !this.bucketName) {
-      throw new Error('S3 client or bucket name not configured');
+      throw new Error(
+        'S3 client or bucket name not configured for generating download URL.',
+      );
     }
-
     try {
       const command = new GetObjectCommand({
         Bucket: this.bucketName,
         Key: filePath,
+        ResponseContentDisposition: `attachment; filename="${filename}"`,
       });
-
-      const response = await this.s3Client.send(command);
-
-      if (!response.Body) {
-        throw new Error('No response body returned from S3');
-      }
-
-      return response.Body as Readable;
+      const url = await getSignedUrl(this.s3Client, command, {
+        expiresIn: this.signedUrlExpiresIn,
+      });
+      this.logger.log(
+        `Generated pre-signed URL for ${filePath} (expires in ${this.signedUrlExpiresIn}s)`,
+      );
+      return url;
     } catch (error) {
       this.logger.error(
-        `Failed to download file from S3: ${
+        `Failed to generate pre-signed URL for ${filePath}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      throw new Error(`Failed to download file from S3: ${error}`);
+      throw new Error(`Failed to generate pre-signed URL: ${error}`);
     }
   }
 }

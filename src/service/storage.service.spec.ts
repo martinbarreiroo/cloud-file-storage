@@ -6,13 +6,8 @@ import { UserQuotaService } from './user-quota.service';
 import { QuotaExceededException } from '../exceptions/quota-exceeded.exception';
 import { Repository } from 'typeorm';
 import { UserQuota } from '../entities/file/user-quota.entity';
-
+import { StorageProvider } from '../interfaces/storage-provider-interface';
 /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/unbound-method */
-
-interface MockStream {
-  pipe: jest.Mock;
-  on: jest.Mock;
-}
 
 interface UploadedFileInfo {
   id: string;
@@ -67,14 +62,12 @@ class MockAzureProvider {
     };
   }
 
-  async downloadFileStream(): Promise<MockStream> {
-    // Mock implementation with actual await
+  async generateDownloadUrl(
+    filePath: string,
+    filename: string,
+  ): Promise<string> {
     await Promise.resolve();
-    // Return a mock readable stream
-    return {
-      pipe: jest.fn(),
-      on: jest.fn(),
-    };
+    return `https://mockazure.com/${filePath}?sasTokenFor=${filename}`;
   }
 }
 
@@ -86,7 +79,7 @@ class MockS3Provider {
   async isAvailable(): Promise<boolean> {
     // Mock implementation with actual await
     await Promise.resolve();
-    return false; // Simulate S3 unavailable
+    return false; // Simulate S3 unavailable by default in these mocks
   }
 
   async uploadFile(): Promise<never> {
@@ -95,10 +88,16 @@ class MockS3Provider {
     throw new Error('S3 not available');
   }
 
-  async downloadFileStream(): Promise<never> {
-    // Mock implementation with actual await
+  async generateDownloadUrl(): Promise<string> {
     await Promise.resolve();
-    throw new Error('S3 not available');
+    // Simulate S3 not available for URL generation in this specific mock if needed by a test
+    // For a success case, it would return a URL like the Azure one.
+    // To test the S3 success path, a dedicated MockS3Provider with isAvailable=true and working generateDownloadUrl would be needed.
+    // For now, let's make it work for Azure path in the tests and S3 can fail over.
+    // Or, let's assume S3 also works for a generic test case, if S3 was available:
+    // return `https://mocks3.com/bucket/${filePath}?sigFor=${filename}`;
+    // For this specific mock setup where S3.isAvailable() is false, this won't be hit often unless forced.
+    throw new Error('S3 not available for URL gen in this mock');
   }
 }
 
@@ -280,11 +279,11 @@ describe('StorageService', () => {
     });
   });
 
-  describe('getDownloadableFileData', () => {
+  describe('getDownloadUrlData', () => {
     const userId = 'test-user-id';
     const fileId = 'test-file-id';
 
-    it('should return stream for valid file owned by the user', async () => {
+    it('should return download URL data for valid file owned by the user', async () => {
       // Arrange
       const fileEntity = {
         id: fileId,
@@ -296,30 +295,28 @@ describe('StorageService', () => {
       };
 
       const mockFindOne = jest.fn().mockResolvedValue(fileEntity);
-      // Type assertion to access mock functions
       (fileRepository.findOne as jest.Mock) = mockFindOne;
 
       // Act
-      const result = await service.getDownloadableFileData(fileId, userId);
+      const result = await service.getDownloadUrlData(fileId, userId);
 
       // Assert
       expect(result).toBeDefined();
-      expect(result.stream).toBeDefined();
-      expect(result.metadata).toEqual({
-        filename: fileEntity.filename,
-        contentType: fileEntity.contentType,
-      });
+      expect(result.downloadUrl).toBe(
+        `https://mockazure.com/${fileEntity.path}?sasTokenFor=${fileEntity.filename}`,
+      );
+      expect(result.filename).toBe(fileEntity.filename);
+      expect(result.contentType).toBe(fileEntity.contentType);
     });
 
     it('should throw NotFoundException for non-existent file', async () => {
       // Arrange
       const mockFindOne = jest.fn().mockResolvedValue(null);
-      // Type assertion to access mock functions
       (fileRepository.findOne as jest.Mock) = mockFindOne;
 
       // Act & Assert
       await expect(
-        service.getDownloadableFileData(fileId, userId),
+        service.getDownloadUrlData(fileId, userId),
       ).rejects.toThrow();
     });
 
@@ -335,13 +332,82 @@ describe('StorageService', () => {
       };
 
       const mockFindOne = jest.fn().mockResolvedValue(fileEntity);
-      // Type assertion to access mock functions
       (fileRepository.findOne as jest.Mock) = mockFindOne;
 
       // Act & Assert
       await expect(
-        service.getDownloadableFileData(fileId, userId),
+        service.getDownloadUrlData(fileId, userId),
       ).rejects.toThrow();
+    });
+
+    it('should throw error if provider does not implement generateDownloadUrl', async () => {
+      // Arrange
+      const fileEntity = {
+        id: fileId,
+        userId,
+        provider: 'azure',
+        path: 'user-files/test.txt',
+        filename: 'test.txt',
+        contentType: 'text/plain',
+      };
+      (fileRepository.findOne as jest.Mock).mockResolvedValue(fileEntity);
+
+      // Temporarily break the mock provider
+      const originalAzureProvider: StorageProvider | undefined = service[
+        'availableProviders'
+      ].find((p) => p.getProviderName() === 'azure');
+      if (originalAzureProvider) {
+        const originalMethod = originalAzureProvider.generateDownloadUrl;
+        // Temporarily cast to allow undefined for the test
+        (
+          originalAzureProvider as {
+            generateDownloadUrl?: typeof originalMethod;
+          }
+        ).generateDownloadUrl = undefined;
+        await expect(
+          service.getDownloadUrlData(fileId, userId),
+        ).rejects.toThrow(
+          'generateDownloadUrl method not implemented for provider azure.',
+        );
+        // Restore the method
+        (
+          originalAzureProvider as {
+            generateDownloadUrl?: typeof originalMethod;
+          }
+        ).generateDownloadUrl = originalMethod;
+      } else {
+        throw new Error('Azure mock provider not found for test setup');
+      }
+    });
+
+    it('should throw error if provider fails to generate URL', async () => {
+      // Arrange
+      const fileEntity = {
+        id: fileId,
+        userId,
+        provider: 'azure',
+        path: 'user-files/test.txt',
+        filename: 'test.txt',
+        contentType: 'text/plain',
+      };
+      (fileRepository.findOne as jest.Mock).mockResolvedValue(fileEntity);
+
+      // Make the mock provider throw an error
+      const azureProvider = service['availableProviders'].find(
+        (p) => p.getProviderName() === 'azure',
+      );
+      if (azureProvider) {
+        jest
+          .spyOn(azureProvider, 'generateDownloadUrl')
+          .mockRejectedValueOnce(new Error('Azure URL gen failed'));
+        await expect(
+          service.getDownloadUrlData(fileId, userId),
+        ).rejects.toThrow(
+          'Failed to generate download URL from storage provider.',
+        );
+      } else {
+        throw new Error('Azure mock provider not found for test setup');
+      }
     });
   });
 });

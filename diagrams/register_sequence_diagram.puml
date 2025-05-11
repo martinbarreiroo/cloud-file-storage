@@ -1,0 +1,27 @@
+@startuml
+title User Registration Sequence Diagram
+
+actor Client
+participant "API Gateway" as APIGateway
+participant "Authentication Service" as AuthService
+participant "User Database" as UserDB
+
+Client -> APIGateway: Register Request (username, email, password, role.)
+APIGateway -> AuthService: Forward Registration Request
+
+AuthService -> AuthService: Hash password
+
+AuthService -> UserDB: Create User (username, email, hashed_password, role.)
+UserDB --> AuthService: User Creation Status (Success/Failure e.g. user exists)
+
+alt User Created Successfully
+    AuthService -> AuthService: Generate Access Token (JWT)
+    note right of AuthService: Access Token with duration (1 hour).
+    AuthService --> APIGateway: Registration Successful (access_token, user_info)
+    APIGateway --> Client: Registration Successful (access_token, user_info)
+else Registration Failed
+    AuthService --> APIGateway: Registration Failed (user already exists, validation error)
+    APIGateway --> Client: Registration Failed
+end
+
+@enduml 

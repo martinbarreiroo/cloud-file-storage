@@ -1,0 +1,26 @@
+@startuml
+title User Login Sequence Diagram
+
+actor Client
+participant "API Gateway" as APIGateway
+participant "Authentication Service" as AuthService
+participant "User Database" as UserDB
+
+Client -> APIGateway: Login Request (email, password)
+APIGateway -> AuthService: Forward Login Request
+
+AuthService -> UserDB: Get User (email)
+UserDB --> AuthService: User Data (hashed_password, user_info) or User Not Found
+
+alt User Found and Password Matches
+    AuthService -> AuthService: Verify password (compare provided with stored hash)
+    AuthService -> AuthService: Generate Access Token (JWT)
+    note right of AuthService: Access Token typically with duration (1 hour).
+    AuthService --> APIGateway: Login Successful (access_token, refresh_token)
+    APIGateway --> Client: Login Successful (access_token, refresh_token)
+else User Not Found or Password Mismatch
+    AuthService --> APIGateway: Login Failed (Invalid credentials or User not found)
+    APIGateway --> Client: Login Failed
+end
+
+@enduml 

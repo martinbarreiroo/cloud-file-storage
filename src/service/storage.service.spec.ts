@@ -403,7 +403,7 @@ describe('StorageService', () => {
         await expect(
           service.getDownloadUrlData(fileId, userId),
         ).rejects.toThrow(
-          'Failed to generate download URL from storage provider.',
+          'Could not generate download URL from azure at this time. Please try again later. Original error: Azure URL gen failed',
         );
       } else {
         throw new Error('Azure mock provider not found for test setup');

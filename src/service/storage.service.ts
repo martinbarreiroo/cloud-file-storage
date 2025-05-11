@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { UploadFileDto } from '../dto/file/upload-file-dto';
 import { AzureStorageProvider } from '../providers/storage/azure-storage.provider';
@@ -213,10 +214,20 @@ export class StorageService {
 
     if (!provider) {
       this.logger.error(
-        `Storage provider ${fileEntity.provider} not found for file ${fileId}`,
+        `Storage provider configuration for ${fileEntity.provider} not found for file ${fileId}`,
       );
       throw new Error(
         `Storage provider ${fileEntity.provider} not found for file ${fileId}.`,
+      );
+    }
+
+    const providerIsAvailable = await provider.isAvailable();
+    if (!providerIsAvailable) {
+      this.logger.warn(
+        `The storage provider ${fileEntity.provider} for file ${fileId} is currently unavailable.`,
+      );
+      throw new ServiceUnavailableException(
+        `We will email you your download URL for ${fileEntity.filename} as soon as the service for ${fileEntity.provider} is back up and running.`,
       );
     }
 
@@ -231,8 +242,8 @@ export class StorageService {
 
     try {
       const downloadUrl = await provider.generateDownloadUrl(
-        fileEntity.path, // filePath for the provider
-        fileEntity.filename, // original filename for Content-Disposition
+        fileEntity.path,
+        fileEntity.filename,
       );
       this.logger.log(
         `Generated download URL for file ${fileEntity.filename} from provider ${fileEntity.provider}`,
@@ -240,7 +251,7 @@ export class StorageService {
       return {
         downloadUrl,
         filename: fileEntity.filename,
-        contentType: fileEntity.contentType, // Still useful for the client if needed
+        contentType: fileEntity.contentType,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -248,7 +259,9 @@ export class StorageService {
       this.logger.error(
         `Error generating download URL for ${fileId} from provider ${fileEntity.provider}: ${errorMessage}`,
       );
-      throw new Error('Failed to generate download URL from storage provider.');
+      throw new ServiceUnavailableException(
+        `Could not generate download URL from ${fileEntity.provider} at this time. Please try again later. Original error: ${errorMessage}`,
+      );
     }
   }
 

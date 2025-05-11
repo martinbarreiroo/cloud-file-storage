@@ -162,16 +162,8 @@ export class StorageController {
       );
       return urlData;
     } catch (error: unknown) {
-      if (error instanceof NotFoundException) {
-        throw new HttpException(
-          'File not found or access denied',
-          HttpStatus.NOT_FOUND,
-        );
-      }
       if (error instanceof HttpException) {
-        if (error.getStatus() === (HttpStatus.FORBIDDEN as number)) {
-          throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
-        }
+        throw error;
       }
       const errorMessage =
         error instanceof Error ? error.message : String(error);

@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Repository } from 'typeorm';
 import { createTestApp, cleanTestDatabase } from './test-setup';
+import { v4 as uuidv4 } from 'uuid';
 
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 
@@ -43,6 +44,12 @@ interface FilesResponse {
 
 interface ErrorResponse {
   message: string;
+}
+
+interface DownloadUrlApiResponse {
+  downloadUrl: string;
+  filename: string;
+  contentType: string;
 }
 
 describe('File Upload (e2e)', () => {
@@ -185,8 +192,9 @@ describe('File Upload (e2e)', () => {
     it('should reject upload without authentication', async () => {
       await request(app.getHttpServer())
         .post('/storage/upload')
-        .attach('file', testFilePath)
-        .field('filename', 'test-file.txt')
+        // Attach a minimal buffer instead of a real file path for this auth test
+        .attach('file', Buffer.from('tiny'), 'tiny.txt')
+        .field('filename', 'test-file-auth-reject.txt') // Still send a filename field
         .expect(401);
     });
   });
@@ -220,83 +228,74 @@ describe('File Upload (e2e)', () => {
     });
   });
 
-  describe('/storage/download/:id (GET)', () => {
-    it('should download a file successfully', async () => {
+  describe('/storage/download-url (GET)', () => {
+    it('should get a download URL successfully', async () => {
       // First upload a file
-      await request(app.getHttpServer())
+      const uploadResponse = await request(app.getHttpServer())
         .post('/storage/upload')
         .set('Authorization', `Bearer ${authToken}`)
         .attach('file', testFilePath)
         .field('filename', 'test-file.txt')
-        .field('description', 'A test file upload');
+        .field('description', 'A test file for download URL')
+        .field('contentType', 'text/plain');
 
-      // Get file ID
-      const filesResponse = await request(app.getHttpServer())
-        .get('/storage/files')
+      const uploadedFileDetails = uploadResponse.body as FileResponse;
+      expect(uploadedFileDetails.success).toBe(true);
+      const fileId = uploadedFileDetails.fileDetails.id;
+
+      // Get the download URL
+      const response = await request(app.getHttpServer())
+        .get(`/storage/download-url?fileId=${fileId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      const filesList = filesResponse.body as FilesResponse;
-      expect(filesList.files).toBeDefined();
-      expect(filesList.files.length).toBeGreaterThan(0);
-
-      const fileId = filesList.files[0].id;
-
-      // Download the file
-      const response = await request(app.getHttpServer())
-        .get(`/storage/download?fileId=${fileId}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200)
-        .buffer()
-        .parse((res, callback) => {
-          let data = '';
-          res.on('data', (chunk) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            callback(null, data);
-          });
-        });
-
-      // Verify file content
-      expect(response.body).toBe(testFileContent);
-      expect(response.headers['content-type']).toBe('application/octet-stream');
-      expect(response.headers['content-disposition']).toContain(
-        'test-file.txt',
-      );
+      // Verify the response body for the download URL
+      const urlResponse = response.body as DownloadUrlApiResponse;
+      expect(urlResponse.downloadUrl).toBeDefined();
+      expect(typeof urlResponse.downloadUrl).toBe('string');
+      // Basic check for a URL pattern (can be made more sophisticated)
+      expect(urlResponse.downloadUrl).toMatch(/^https?:\/\//);
+      expect(urlResponse.filename).toBe('test-file.txt'); // Check original filename
+      // The contentType might be auto-detected or octet-stream if not perfectly set during upload mock/test
+      // For this test, let's assume it should be 'text/plain' or what the upload mock sets.
+      // If test-file.txt is used directly, it's often treated as application/octet-stream by supertest if not specified by server
+      // However, our service now attempts to auto-detect. For a .txt file, it should be text/plain.
+      // Let's check against the uploaded file's determined content type or a reasonable expectation.
+      // If the upload actually determined it as 'text/plain', then this should match.
+      // The fileEntity.contentType in DB will be the source of truth for this response field.
+      expect(urlResponse.contentType).toBeDefined();
+      // To be more precise, we could fetch the file metadata from DB first or check against what upload step returned if it had contentType
+      // For now, checking if it's defined is a good first step.
+      // If the content type of test-file.txt is known, it can be asserted here.
+      // Defaulting to check if it is 'text/plain' as it's a .txt file.
+      // This might need adjustment based on how contentType is determined for 'test-file.txt' in the test setup.
+      // The actual content type is stored in the database by the upload service, and that's what this endpoint returns.
+      // For a .txt file uploaded, it should likely be 'text/plain'
+      // If the test file 'test-file.txt' is used, its mimetype is 'text/plain' if correctly identified.
+      // The `fileType.fromBuffer` in StorageService should identify it as text/plain.
+      expect(urlResponse.contentType).toEqual('text/plain');
     });
 
-    it('should reject download without authentication', async () => {
-      // First upload a file
-      await request(app.getHttpServer())
+    it('should reject getting download URL without authentication', async () => {
+      // Upload a file first to ensure a fileId exists
+      const uploadResponse = await request(app.getHttpServer())
         .post('/storage/upload')
         .set('Authorization', `Bearer ${authToken}`)
         .attach('file', testFilePath)
-        .field('filename', 'test-file.txt')
-        .field('description', 'A test file upload');
-
-      // Get file ID
-      const filesResponse = await request(app.getHttpServer())
-        .get('/storage/files')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      const filesList = filesResponse.body as FilesResponse;
-      expect(filesList.files).toBeDefined();
-      expect(filesList.files.length).toBeGreaterThan(0);
-
-      const fileId = filesList.files[0].id;
+        .field('filename', 'test-auth-check.txt');
+      const fileId = (uploadResponse.body as FileResponse).fileDetails.id;
 
       await request(app.getHttpServer())
-        .get(`/storage/download?fileId=${fileId}`)
+        .get(`/storage/download-url?fileId=${fileId}`)
         .expect(401);
     });
 
-    it('should reject download of non-existent file', async () => {
+    it('should reject getting download URL for a non-existent file', async () => {
+      const nonExistentFileId = uuidv4();
       await request(app.getHttpServer())
-        .get('/storage/download?fileId=non-existent-id')
+        .get(`/storage/download-url?fileId=${nonExistentFileId}`)
         .set('Authorization', `Bearer ${authToken}`)
-        .expect(500); // Server returns 500 for non-existent files, not 404
+        .expect(404);
     });
   });
 });

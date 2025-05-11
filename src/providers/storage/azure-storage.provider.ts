@@ -7,9 +7,10 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   BlobServiceClient,
   StorageSharedKeyCredential,
-  BlobDownloadResponseParsed,
+  generateBlobSASQueryParameters,
+  BlobSASPermissions,
+  SASProtocol,
 } from '@azure/storage-blob';
-import { Readable } from 'stream';
 
 @Injectable()
 export class AzureStorageProvider implements StorageProvider {
@@ -18,12 +19,17 @@ export class AzureStorageProvider implements StorageProvider {
   private containerName: string;
   private accountName: string;
   private accountKey: string;
+  private sasTokenDuration: number = 3600;
 
   constructor() {
     // Get Azure Storage credentials from environment variables
     this.accountName = process.env.AZURE_STORAGE_ACCOUNT || '';
     this.accountKey = process.env.AZURE_STORAGE_KEY || '';
     this.containerName = process.env.AZURE_STORAGE_CONTAINER || 'files';
+    this.sasTokenDuration = parseInt(
+      process.env.AZURE_SAS_TOKEN_DURATION_SECONDS || '3600',
+      10,
+    );
 
     if (!this.accountName || !this.accountKey) {
       this.logger.warn(
@@ -43,6 +49,7 @@ export class AzureStorageProvider implements StorageProvider {
       );
 
       this.logger.log('Azure Storage Provider initialized successfully');
+      this.logger.log(`Azure SAS Token Duration: ${this.sasTokenDuration}s`);
     }
   }
 
@@ -51,20 +58,18 @@ export class AzureStorageProvider implements StorageProvider {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (!this.blobServiceClient) {
+      return false;
+    }
     try {
-      if (!this.blobServiceClient) {
-        return false;
-      }
-
-      // Try to get properties of the container to check if Azure is available
-      const containerClient = this.blobServiceClient.getContainerClient(
-        this.containerName,
-      );
-      await containerClient.getProperties();
+      // Check if we can list containers (requires 'Microsoft.Storage/storageAccounts/blobServices/containers/list' permission)
+      // A more lightweight check might be to get container properties if it always exists.
+      const iter = this.blobServiceClient.listContainers();
+      await iter.next(); // Attempt to get the first item
       return true;
-    } catch (error: unknown) {
+    } catch (error) {
       this.logger.error(
-        `Azure availability check failed: ${
+        `Azure Storage service is not available: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -135,30 +140,50 @@ export class AzureStorageProvider implements StorageProvider {
     }
   }
 
-  async downloadFileStream(filePath: string): Promise<Readable> {
+  async generateDownloadUrl(
+    filePath: string,
+    filename: string,
+  ): Promise<string> {
+    if (!this.blobServiceClient) {
+      throw new Error(
+        'Azure Blob Storage client not initialized for generating SAS URL.',
+      );
+    }
     try {
-      if (!this.blobServiceClient) {
-        throw new Error('Azure Blob Storage client not initialized');
-      }
       const containerClient = this.blobServiceClient.getContainerClient(
         this.containerName,
       );
-      const blockBlobClient = containerClient.getBlockBlobClient(filePath);
+      const blobClient = containerClient.getBlobClient(filePath);
 
-      const downloadResponse: BlobDownloadResponseParsed =
-        await blockBlobClient.download(0);
+      const sasOptions = {
+        containerName: this.containerName,
+        blobName: filePath,
+        startsOn: new Date(),
+        expiresOn: new Date(
+          new Date().valueOf() + this.sasTokenDuration * 1000,
+        ),
+        permissions: BlobSASPermissions.parse('r'),
+        protocol: SASProtocol.Https,
+        contentDisposition: `attachment; filename="${filename}"`,
+      };
 
-      if (!downloadResponse.readableStreamBody) {
-        throw new Error('Readable stream body not available for Azure blob.');
-      }
-      return downloadResponse.readableStreamBody as Readable;
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to download file from Azure ${filePath}: ${errorMessage}`,
+      const sasToken = generateBlobSASQueryParameters(
+        sasOptions,
+        this.blobServiceClient.credential as StorageSharedKeyCredential,
+      ).toString();
+
+      const sasUrl = `${blobClient.url}?${sasToken}`;
+      this.logger.log(
+        `Generated SAS URL for ${filePath} (expires in ${this.sasTokenDuration}s)`,
       );
-      throw error;
+      return Promise.resolve(sasUrl);
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate SAS URL for ${filePath}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return Promise.reject(new Error(`Failed to generate SAS URL: ${error}`));
     }
   }
 }

@@ -12,7 +12,7 @@ services:
       DB_USER: ${DB_USER:-admin}
       DB_PASSWORD: ${DB_PASSWORD:-admin}
       DB_NAME: ${DB_NAME:-cloud-file-storage-db}
-      DB_HOST: db-dev
+      DB_HOST: ${DB_HOST:localhost}
       DB_PORT: ${DB_PORT:-5432}
       NODE_ENV: production
       MINIO_ENDPOINT: minio

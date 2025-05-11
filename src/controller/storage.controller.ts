@@ -11,9 +11,7 @@ import {
   HttpStatus,
   HttpException,
   Query,
-  Res,
   Logger,
-  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -26,10 +24,10 @@ import {
   ApiTags,
   ApiQuery,
   ApiBearerAuth,
-  ApiParam,
 } from '@nestjs/swagger';
 import { RequestWithUser } from '../interfaces/user.interface';
 import { Response } from 'express';
+import { DownloadUrlResponseDto } from '../dto/file/download-url-response.dto';
 
 @ApiTags('storage')
 @Controller('storage')
@@ -141,29 +139,28 @@ export class StorageController {
     }
   }
 
-  @ApiOperation({ summary: 'Download a file' })
-  @ApiResponse({ status: 200, description: 'File downloaded successfully' })
+  @ApiOperation({ summary: 'Get a secure URL to download a file' })
+  @ApiResponse({
+    status: 200,
+    description: 'Download URL generated successfully',
+    type: DownloadUrlResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'File not found' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiBearerAuth()
-  @ApiParam({ name: 'fileId', description: 'The ID of the file to download' })
+  @ApiQuery({ name: 'fileId', description: 'The ID of the file to download' })
   @UseGuards(JwtAuthGuard)
-  @Get('download')
-  async downloadFile(
+  @Get('download-url')
+  async getDownloadUrl(
     @Query('fileId') fileId: string,
     @Request() req: RequestWithUser,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
+  ): Promise<DownloadUrlResponseDto> {
     try {
-      const { stream, metadata } =
-        await this.storageService.getDownloadableFileData(fileId, req.user.id);
-
-      res.setHeader('Content-Type', metadata.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${metadata.filename}"`,
+      const urlData = await this.storageService.getDownloadUrlData(
+        fileId,
+        req.user.id,
       );
-      return new StreamableFile(stream);
+      return urlData;
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
         throw new HttpException(
@@ -178,9 +175,11 @@ export class StorageController {
       }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error downloading file ${fileId}: ${errorMessage}`);
+      this.logger.error(
+        `Error getting download URL for file ${fileId}: ${errorMessage}`,
+      );
       throw new HttpException(
-        'Failed to download file',
+        'Failed to get download URL',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

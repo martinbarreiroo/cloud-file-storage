@@ -16,8 +16,8 @@ alt User Found and Password Matches
     AuthService -> AuthService: Verify password (compare provided with stored hash)
     AuthService -> AuthService: Generate Access Token (JWT)
     note right of AuthService: Access Token typically with duration (1 hour).
-    AuthService --> APIGateway: Login Successful (access_token, refresh_token)
-    APIGateway --> Client: Login Successful (access_token, refresh_token)
+    AuthService --> APIGateway: Login Successful (access_token, user data)
+    APIGateway --> Client: Login Successful (access_token, user data)
 else User Not Found or Password Mismatch
     AuthService --> APIGateway: Login Failed (Invalid credentials or User not found)
     APIGateway --> Client: Login Failed

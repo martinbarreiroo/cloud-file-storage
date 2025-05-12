@@ -28,7 +28,7 @@ alt User Authorized and File Exists
         StorageService --> APIGateway: Download URL (pre-signed/SAS URL)
         APIGateway --> Client: Download URL
     else Provider Not Found or Error
-        StorageService --> APIGateway: Error (e.g., Provider not found, URL generation failed)
+        StorageService --> APIGateway: Error ( Descriptive message to improve user experience: We will email you your download URL for 'filename' as soon as the service for 'provider' is back up and running)
         APIGateway --> Client: Error Response
     end
 else User Not Authorized or File Not Found

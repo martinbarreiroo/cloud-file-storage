@@ -44,6 +44,7 @@ export class StorageController {
     description: 'Bad request or file upload failed',
   })
   @ApiResponse({ status: 500, description: 'Server error during upload' })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -66,6 +67,7 @@ export class StorageController {
   }
 
   @ApiOperation({ summary: 'Check provider status' })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get('status')
   async checkProviders() {
@@ -98,6 +100,7 @@ export class StorageController {
     description: 'File metadata retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'File not found' })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get('file-data')
   async getFileById(@Query('id') id: string) {
@@ -116,6 +119,7 @@ export class StorageController {
   @ApiOperation({ summary: 'List all files for the authenticated user' })
   @ApiResponse({ status: 200, description: 'Files listed successfully' })
   @ApiResponse({ status: 500, description: 'Failed to list files' })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get('files')
   async listUserFiles(@Request() req: RequestWithUser) {
@@ -149,6 +153,7 @@ export class StorageController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiBearerAuth()
   @ApiQuery({ name: 'fileId', description: 'The ID of the file to download' })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get('download-url')
   async getDownloadUrl(

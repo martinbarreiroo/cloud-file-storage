@@ -7,7 +7,12 @@ import {
 } from '@nestjs/common';
 import { AdminService } from '../service/admin.service';
 import { AdminAuthGuard } from '../auth/guards/admin-auth.guard';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -24,6 +29,7 @@ export class AdminController {
     status: 403,
     description: 'Forbidden - Admin access required',
   })
+  @ApiBearerAuth()
   @Get('stats')
   async getDailyStats(): Promise<{
     success: boolean;

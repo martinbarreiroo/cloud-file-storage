@@ -15,9 +15,11 @@ import {
   ApiResponse,
   ApiTags,
   ApiBearerAuth,
+  ApiBody,
 } from '@nestjs/swagger';
 import { AuthResponseDto } from '../dto/auth/auth-response.dto';
 import { RequestWithUser } from '../interfaces/user.interface';
+import { LoginDto } from '../dto/user/login.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -43,6 +45,7 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: LoginDto })
   @UseGuards(LocalAuthGuard)
   @Post('login')
   login(@Request() req: RequestWithUser) {
